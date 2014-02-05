@@ -98,8 +98,8 @@ func testReadPacketXRQ(t *testing.T, prefix []byte) {
 		b.WriteString("netascii\x00")
 		b.WriteString("opt1\x00")
 		b.WriteString("value1\x00")
-		b.WriteString("opt2\x00")
-		b.WriteString("value2\x00")
+		b.WriteString("OPT2\x00")
+		b.WriteString("VALUE2\x00")
 		p, err = packetFromWire(&b)
 		assert.Nil(t, err)
 
@@ -345,8 +345,8 @@ func TestPacketOPACK(t *testing.T) {
 		b.Write([]byte{0x0, uint8(opcodeOACK)})
 		b.WriteString("opt1\x00")
 		b.WriteString("value1\x00")
-		b.WriteString("opt2\x00")
-		b.WriteString("value2\x00")
+		b.WriteString("OPT2\x00")
+		b.WriteString("VALUE2\x00")
 		p, err = packetFromWire(&b)
 		assert.Nil(t, err)
 

@@ -86,7 +86,7 @@ func readOptions(b *bytes.Buffer) (map[string]string, error) {
 			return nil, err
 		}
 
-		o[k] = v
+		o[strings.ToLower(k)] = strings.ToLower(v)
 	}
 
 	return o, nil
