@@ -77,6 +77,35 @@ func (h *handlerContext) WriteFile(peer net.Addr, filename string) (WriteCloser,
 	return h.writeFunc(peer, filename)
 }
 
+func (h *handlerContext) SetReadCloser(r ReadCloser) {
+	h.readFunc = func(_ net.Addr, _ string) (ReadCloser, error) {
+		return r, nil
+	}
+}
+
+func (h *handlerContext) SetWriteCloser(w WriteCloser) {
+	h.writeFunc = func(_ net.Addr, _ string) (WriteCloser, error) {
+		return w, nil
+	}
+}
+
+func (h *handlerContext) Negotiate(t *testing.T, o map[string]string) {
+	h.snd <- &packetRRQ{packetXRQ{options: o}}
+
+	// Receive and validate OACK
+	poack := <-h.rcv
+	assert.IsType(t, &packetOACK{}, poack)
+	oack := poack.(*packetOACK)
+
+	// Validate that we got what we asked for
+	for k, v := range o {
+		assert.Equal(t, v, oack.options[k])
+	}
+
+	// Send ACK as response to OACK.
+	h.snd <- &packetACK{blockNr: 0}
+}
+
 func TestMalformedFirstPacket(t *testing.T) {
 	h := newHandlerContext()
 	h.snd <- errOpcode
@@ -248,36 +277,12 @@ func TestReadRequestNegotiation(t *testing.T) {
 	}
 }
 
-func TestReadRequestFile(t *testing.T) {
+func TestReadRequestChunks(t *testing.T) {
 	h := newHandlerContext()
 
 	buf := []byte{0x1, 0x2, 0x3, 0x4, 0x5, 0x6, 0x7, 0x8, 0x9, 0xa}
-
-	// Return reader of buf as file to serve up.
-	h.readFunc = func(_ net.Addr, _ string) (ReadCloser, error) {
-		return &rwcBuffer{bytes.NewBuffer(buf)}, nil
-	}
-
-	p := &packetRRQ{
-		packetXRQ{
-			options: map[string]string{
-				"blksize": "8",
-			},
-		},
-	}
-
-	h.snd <- p
-
-	// Receive and validate OACK
-	poack := <-h.rcv
-	assert.IsType(t, &packetOACK{}, poack)
-	oack := poack.(*packetOACK)
-	blksize, ok := oack.options["blksize"]
-	assert.True(t, ok)
-	assert.Equal(t, blksize, "8")
-
-	// Send ACK as response to OACK.
-	h.snd <- &packetACK{blockNr: 0}
+	h.SetReadCloser(&rwcBuffer{bytes.NewBuffer(buf)})
+	h.Negotiate(t, map[string]string{"blksize": "8"})
 
 	// DATA packets we expect to receive.
 	packets := []*packetDATA{
@@ -293,4 +298,27 @@ func TestReadRequestFile(t *testing.T) {
 		assert.Equal(t, expected, actual)
 		h.snd <- &packetACK{blockNr: actual.blockNr}
 	}
+}
+
+func TestReadRequestRetries(t *testing.T) {
+	h := newHandlerContext()
+
+	buf := []byte{0x1}
+	h.SetReadCloser(&rwcBuffer{bytes.NewBuffer(buf)})
+	h.Negotiate(t, map[string]string{"blksize": "8"})
+
+	for i := 0; i < 2; i++ {
+		// Throw away packet
+		_ = <-h.rcv
+		// Trigger timeout
+		h.snd <- ErrTimeout
+	}
+
+	pdata := <-h.rcv
+	assert.IsType(t, &packetDATA{}, pdata)
+
+	data := pdata.(*packetDATA)
+	assert.Equal(t, uint16(1), data.blockNr)
+	assert.Equal(t, buf, data.data)
+	h.snd <- &packetACK{blockNr: data.blockNr}
 }
