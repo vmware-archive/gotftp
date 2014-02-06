@@ -70,9 +70,9 @@ func serve(r packetReader, w packetWriter, h Handler) {
 	s.serve()
 }
 
-func (s *session) writeError(code uint16, message string) error {
+func (s *session) writeError(err tftpError, message string) error {
 	p := packetERROR{
-		errorCode:    code,
+		errorCode:    err.Code,
 		errorMessage: message,
 	}
 
@@ -107,7 +107,7 @@ func (s *session) writeAndWaitForPacket(p packet, v packetValidator) (packet, er
 			}
 
 			if err != nil {
-				_ = s.writeError(0, err.Error())
+				_ = s.writeError(tftpErrNotDefined, err.Error())
 				return nil, err
 			}
 
@@ -124,7 +124,7 @@ func (s *session) writeAndWaitForPacket(p packet, v packetValidator) (packet, er
 func (s *session) serve() {
 	p, err := s.read(0)
 	if err != nil {
-		_ = s.writeError(0, err.Error())
+		_ = s.writeError(tftpErrNotDefined, err.Error())
 		return
 	}
 
@@ -134,7 +134,7 @@ func (s *session) serve() {
 	case *packetWRQ:
 		s.serveWRQ(px)
 	default:
-		_ = s.writeError(4, "")
+		_ = s.writeError(tftpErrIllegalOperation, "")
 	}
 }
 
@@ -194,11 +194,11 @@ func (s *session) serveRRQ(p *packetRRQ) {
 	if err != nil {
 		switch err {
 		case os.ErrNotExist:
-			_ = s.writeError(1, err.Error())
+			_ = s.writeError(tftpErrNotFound, err.Error())
 		case os.ErrPermission:
-			_ = s.writeError(2, err.Error())
+			_ = s.writeError(tftpErrAccessViolation, err.Error())
 		default:
-			_ = s.writeError(0, err.Error())
+			_ = s.writeError(tftpErrNotDefined, err.Error())
 		}
 		return
 	}
@@ -211,7 +211,7 @@ func (s *session) serveRRQ(p *packetRRQ) {
 	if len(p.options) > 0 {
 		options, err := s.negotiate(p.options)
 		if err != nil {
-			_ = s.writeError(8, err.Error())
+			_ = s.writeError(tftpErrOptionNegotiation, err.Error())
 			return
 		}
 
@@ -232,7 +232,7 @@ func (s *session) serveRRQ(p *packetRRQ) {
 			if err == io.EOF {
 				break
 			} else {
-				_ = s.writeError(0, err.Error())
+				_ = s.writeError(tftpErrNotDefined, err.Error())
 				return
 			}
 		}
@@ -250,5 +250,5 @@ func (s *session) serveRRQ(p *packetRRQ) {
 }
 
 func (s *session) serveWRQ(p *packetWRQ) {
-	_ = s.writeError(0, "not supported")
+	_ = s.writeError(tftpErrNotDefined, "not supported")
 }

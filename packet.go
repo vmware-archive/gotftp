@@ -25,18 +25,23 @@ const (
 	modeOCTET    = mode("octet")
 )
 
-// ErrorCodes contains the error codes as defined by the TFTP spec.
-var ErrorCodes = []string{
-	0: "Not defined, see error message (if any).",
-	1: "File not found.",
-	2: "Access violation.",
-	3: "Disk full or allocation exceeded.",
-	4: "Illegal TFTP operation.",
-	5: "Unknown transfer ID.",
-	6: "File already exists.",
-	7: "No such user.",
-	8: "Option negotiation error.",
+type tftpError struct {
+	Code    uint16
+	Message string
 }
+
+var (
+	// Error codes as defined by the TFTP spec.
+	tftpErrNotDefined        = tftpError{0, "Not defined, see error message (if any)."}
+	tftpErrNotFound          = tftpError{1, "File not found."}
+	tftpErrAccessViolation   = tftpError{2, "Access violation."}
+	tftpErrDiskFull          = tftpError{3, "Disk full or allocation exceeded."}
+	tftpErrIllegalOperation  = tftpError{4, "Illegal TFTP operation."}
+	tftpErrUnknownTransferID = tftpError{5, "Unknown transfer ID."}
+	tftpErrFileAlreadyExists = tftpError{6, "File already exists."}
+	tftpErrNoSuchUser        = tftpError{7, "No such user."}
+	tftpErrOptionNegotiation = tftpError{8, "Option negotiation error."}
+)
 
 var (
 	errOpcode = errors.New("invalid opcode")
