@@ -35,6 +35,7 @@ var ErrorCodes = []string{
 	5: "Unknown transfer ID.",
 	6: "File already exists.",
 	7: "No such user.",
+	8: "Option negotiation error.",
 }
 
 var (
