@@ -53,8 +53,8 @@ type session struct {
 	packetWriter
 
 	h       Handler
-	blksize int
-	timeout int
+	blksize int // The payload size per data packet.
+	timeout int // The number of seconds before a retransmit takes place.
 }
 
 func serve(r packetReader, w packetWriter, h Handler) {
