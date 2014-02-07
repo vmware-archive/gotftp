@@ -42,7 +42,12 @@ func newHandlerContext() *handlerContext {
 		snd: make(chan interface{}, 1),
 		rcv: make(chan packet, 1),
 	}
-	go serve(&net.UDPAddr{}, h, h, h)
+	go func() {
+		serve(&net.UDPAddr{}, h, h, h)
+
+		// No more packets can be sent by the server.
+		close(h.rcv)
+	}()
 	return h
 }
 
@@ -293,11 +298,20 @@ func TestReadRequestChunks(t *testing.T) {
 		packets []*packetDATA // DATA packets we expect to receive.
 	}{
 		{
+			// Empty last packet.
 			buf: []byte{0x0, 0x1, 0x2, 0x3, 0x4, 0x5, 0x6, 0x7, 0x8, 0x9, 0xa, 0xb, 0xc, 0xd, 0xe, 0xf},
 			packets: []*packetDATA{
 				&packetDATA{blockNr: 1, data: []byte{0x0, 0x1, 0x2, 0x3, 0x4, 0x5, 0x6, 0x7}},
 				&packetDATA{blockNr: 2, data: []byte{0x8, 0x9, 0xa, 0xb, 0xc, 0xd, 0xe, 0xf}},
 				&packetDATA{blockNr: 3, data: nil},
+			},
+		},
+		{
+			// Partial last packet.
+			buf: []byte{0x0, 0x1, 0x2, 0x3, 0x4, 0x5, 0x6, 0x7, 0x8, 0x9, 0xa, 0xb, 0xc, 0xd, 0xe},
+			packets: []*packetDATA{
+				&packetDATA{blockNr: 1, data: []byte{0x0, 0x1, 0x2, 0x3, 0x4, 0x5, 0x6, 0x7}},
+				&packetDATA{blockNr: 2, data: []byte{0x8, 0x9, 0xa, 0xb, 0xc, 0xd, 0xe}},
 			},
 		},
 	}
@@ -315,6 +329,11 @@ func TestReadRequestChunks(t *testing.T) {
 			assert.Equal(t, expected, actual)
 			h.snd <- &packetACK{blockNr: actual.blockNr}
 		}
+
+		// There should not be any more packets.
+		p, ok := <-h.rcv
+		assert.False(t, ok)
+		assert.Nil(t, p)
 	}
 }
 

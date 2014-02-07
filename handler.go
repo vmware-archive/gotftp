@@ -225,9 +225,10 @@ func (s *session) serveRRQ(p *packetRRQ) {
 	}
 
 	// Proceed to send the file
-	buf := make([]byte, s.blksize)
-	readErr := error(nil)
-	for blockNr := uint16(1); readErr != io.EOF; blockNr++ {
+	var buf = make([]byte, s.blksize)
+	var n int
+	var readErr, writeErr error
+	for blockNr := uint16(1); readErr == nil; blockNr++ {
 		// The semantics of ReadAtLeast are as follows:
 		//
 		// If == "blksize" bytes are read into buf, it will return with err == nil.
@@ -235,7 +236,7 @@ func (s *session) serveRRQ(p *packetRRQ) {
 		// bytes, it will return the number of bytes read and this error. If this
 		// error is io.EOF, it is rewritten to io.ErrUnexpectedEOF if > 0 bytes
 		// were already read.
-		n, readErr := io.ReadAtLeast(rc, buf, s.blksize)
+		n, readErr = io.ReadAtLeast(rc, buf, s.blksize)
 		switch readErr {
 		case nil:
 			// All is good.
@@ -252,7 +253,7 @@ func (s *session) serveRRQ(p *packetRRQ) {
 			data:    buf[:n],
 		}
 
-		_, writeErr := s.writeAndWaitForPacket(p, ackValidator(blockNr))
+		_, writeErr = s.writeAndWaitForPacket(p, ackValidator(blockNr))
 		if writeErr != nil {
 			return
 		}
