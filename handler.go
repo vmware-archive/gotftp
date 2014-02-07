@@ -224,17 +224,25 @@ func (s *session) serveRRQ(p *packetRRQ) {
 
 	// Proceed to send the file
 	buf := make([]byte, s.blksize)
-	for blockNr := uint16(1); ; blockNr++ {
-		n, err := rc.Read(buf)
-
-		// Only be concerned about error if no bytes were read.
-		if n == 0 {
-			if err == io.EOF {
-				break
-			} else {
-				_ = s.writeError(tftpErrNotDefined, err.Error())
-				return
-			}
+	readErr := error(nil)
+	for blockNr := uint16(1); readErr != io.EOF; blockNr++ {
+		// The semantics of ReadAtLeast are as follows:
+		//
+		// If == "blksize" bytes are read into buf, it will return with err == nil.
+		// If < "blksize" bytes are read into buf and an error occurs reading new
+		// bytes, it will return the number of bytes read and this error. If this
+		// error is io.EOF, it is rewritten to io.ErrUnexpectedEOF if > 0 bytes
+		// were already read.
+		n, readErr := io.ReadAtLeast(rc, buf, s.blksize)
+		switch readErr {
+		case nil:
+			// All is good.
+		case io.EOF, io.ErrUnexpectedEOF:
+			// Treat them as one and the same.
+			readErr = io.EOF
+		default:
+			_ = s.writeError(tftpErrNotDefined, readErr.Error())
+			return
 		}
 
 		p := &packetDATA{
@@ -242,8 +250,8 @@ func (s *session) serveRRQ(p *packetRRQ) {
 			data:    buf[:n],
 		}
 
-		_, err = s.writeAndWaitForPacket(p, ackValidator(blockNr))
-		if err != nil {
+		_, writeErr := s.writeAndWaitForPacket(p, ackValidator(blockNr))
+		if writeErr != nil {
 			return
 		}
 	}

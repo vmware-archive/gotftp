@@ -3,19 +3,29 @@ package gotftp
 import (
 	"bytes"
 	"errors"
+	"io"
 	"net"
 	"os"
 	"testing"
+	"testing/iotest"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 )
 
-type rwcBuffer struct {
-	*bytes.Buffer
+type rcBuffer struct {
+	io.Reader
 }
 
-func (r *rwcBuffer) Close() error {
+func (r *rcBuffer) Close() error {
+	return nil
+}
+
+type wcBuffer struct {
+	io.Writer
+}
+
+func (w *wcBuffer) Close() error {
 	return nil
 }
 
@@ -64,7 +74,7 @@ func (h *handlerContext) write(p packet) error {
 // To implement Handler
 func (h *handlerContext) ReadFile(peer net.Addr, filename string) (ReadCloser, error) {
 	if h.readFunc == nil {
-		return &rwcBuffer{&bytes.Buffer{}}, nil
+		return &rcBuffer{&bytes.Buffer{}}, nil
 	}
 	return h.readFunc(peer, filename)
 }
@@ -72,7 +82,7 @@ func (h *handlerContext) ReadFile(peer net.Addr, filename string) (ReadCloser, e
 // To implement Handler
 func (h *handlerContext) WriteFile(peer net.Addr, filename string) (WriteCloser, error) {
 	if h.writeFunc == nil {
-		return &rwcBuffer{&bytes.Buffer{}}, nil
+		return &wcBuffer{&bytes.Buffer{}}, nil
 	}
 	return h.writeFunc(peer, filename)
 }
@@ -280,14 +290,15 @@ func TestReadRequestNegotiation(t *testing.T) {
 func TestReadRequestChunks(t *testing.T) {
 	h := newHandlerContext()
 
-	buf := []byte{0x1, 0x2, 0x3, 0x4, 0x5, 0x6, 0x7, 0x8, 0x9, 0xa}
-	h.SetReadCloser(&rwcBuffer{bytes.NewBuffer(buf)})
+	buf := []byte{0x0, 0x1, 0x2, 0x3, 0x4, 0x5, 0x6, 0x7, 0x8, 0x9, 0xa, 0xb, 0xc, 0xd, 0xe, 0xf}
+	h.SetReadCloser(&rcBuffer{iotest.OneByteReader(bytes.NewBuffer(buf))})
 	h.Negotiate(t, map[string]string{"blksize": "8"})
 
 	// DATA packets we expect to receive.
 	packets := []*packetDATA{
 		&packetDATA{blockNr: 1, data: buf[:8]},
 		&packetDATA{blockNr: 2, data: buf[8:]},
+		&packetDATA{blockNr: 3, data: nil},
 	}
 
 	for _, expected := range packets {
@@ -304,7 +315,7 @@ func TestReadRequestRetries(t *testing.T) {
 	h := newHandlerContext()
 
 	buf := []byte{0x1}
-	h.SetReadCloser(&rwcBuffer{bytes.NewBuffer(buf)})
+	h.SetReadCloser(&rcBuffer{bytes.NewBuffer(buf)})
 	h.Negotiate(t, map[string]string{"blksize": "8"})
 
 	for i := 0; i < 2; i++ {
