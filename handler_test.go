@@ -288,26 +288,33 @@ func TestReadRequestNegotiation(t *testing.T) {
 }
 
 func TestReadRequestChunks(t *testing.T) {
-	h := newHandlerContext()
-
-	buf := []byte{0x0, 0x1, 0x2, 0x3, 0x4, 0x5, 0x6, 0x7, 0x8, 0x9, 0xa, 0xb, 0xc, 0xd, 0xe, 0xf}
-	h.SetReadCloser(&rcBuffer{iotest.OneByteReader(bytes.NewBuffer(buf))})
-	h.Negotiate(t, map[string]string{"blksize": "8"})
-
-	// DATA packets we expect to receive.
-	packets := []*packetDATA{
-		&packetDATA{blockNr: 1, data: buf[:8]},
-		&packetDATA{blockNr: 2, data: buf[8:]},
-		&packetDATA{blockNr: 3, data: nil},
+	var tests = []struct {
+		buf     []byte
+		packets []*packetDATA // DATA packets we expect to receive.
+	}{
+		{
+			buf: []byte{0x0, 0x1, 0x2, 0x3, 0x4, 0x5, 0x6, 0x7, 0x8, 0x9, 0xa, 0xb, 0xc, 0xd, 0xe, 0xf},
+			packets: []*packetDATA{
+				&packetDATA{blockNr: 1, data: []byte{0x0, 0x1, 0x2, 0x3, 0x4, 0x5, 0x6, 0x7}},
+				&packetDATA{blockNr: 2, data: []byte{0x8, 0x9, 0xa, 0xb, 0xc, 0xd, 0xe, 0xf}},
+				&packetDATA{blockNr: 3, data: nil},
+			},
+		},
 	}
 
-	for _, expected := range packets {
-		pdata := <-h.rcv
-		assert.IsType(t, &packetDATA{}, pdata)
+	for _, test := range tests {
+		h := newHandlerContext()
+		h.SetReadCloser(&rcBuffer{iotest.OneByteReader(bytes.NewBuffer(test.buf))})
+		h.Negotiate(t, map[string]string{"blksize": "8"})
 
-		actual := pdata.(*packetDATA)
-		assert.Equal(t, expected, actual)
-		h.snd <- &packetACK{blockNr: actual.blockNr}
+		for _, expected := range test.packets {
+			pdata := <-h.rcv
+			assert.IsType(t, &packetDATA{}, pdata)
+
+			actual := pdata.(*packetDATA)
+			assert.Equal(t, expected, actual)
+			h.snd <- &packetACK{blockNr: actual.blockNr}
+		}
 	}
 }
 
