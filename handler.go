@@ -53,16 +53,18 @@ type session struct {
 	packetWriter
 
 	h       Handler
+	addr    net.Addr
 	blksize int // The payload size per data packet.
 	timeout int // The number of seconds before a retransmit takes place.
 }
 
-func serve(r packetReader, w packetWriter, h Handler) {
+func serve(addr net.Addr, r packetReader, w packetWriter, h Handler) {
 	s := &session{
 		packetReader: r,
 		packetWriter: w,
 
 		h:       h,
+		addr:    addr,
 		blksize: 512,
 		timeout: 3,
 	}
@@ -190,7 +192,7 @@ func ackValidator(blockNr uint16) packetValidator {
 }
 
 func (s *session) serveRRQ(p *packetRRQ) {
-	rc, err := s.h.ReadFile(&net.UDPAddr{}, p.filename)
+	rc, err := s.h.ReadFile(s.addr, p.filename)
 	if err != nil {
 		switch err {
 		case os.ErrNotExist:

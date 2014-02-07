@@ -42,7 +42,7 @@ func newHandlerContext() *handlerContext {
 		snd: make(chan interface{}, 1),
 		rcv: make(chan packet, 1),
 	}
-	go serve(h, h, h)
+	go serve(&net.UDPAddr{}, h, h, h)
 	return h
 }
 
