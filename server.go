@@ -5,7 +5,38 @@ import (
 	"net"
 	"sync"
 	"time"
+
+	"code.google.com/p/go.net/ipv4"
 )
+
+type controlMessage struct {
+	*ipv4.ControlMessage
+}
+
+func (c controlMessage) LocalAddr() net.Addr {
+	return &net.IPAddr{IP: c.ControlMessage.Dst}
+}
+
+func (c controlMessage) RemoteAddr() net.Addr {
+	return &net.IPAddr{IP: c.ControlMessage.Src}
+}
+
+type zeroConn struct{}
+
+func (c zeroConn) LocalAddr() net.Addr {
+	return &net.IPAddr{IP: net.IPv4zero}
+}
+
+func (c zeroConn) RemoteAddr() net.Addr {
+	return &net.IPAddr{IP: net.IPv4zero}
+}
+
+func newZeroConn() Conn {
+	return zeroConn{}
+}
+
+// ZeroConn can be used as a placeholder if otherwise not known.
+var ZeroConn = newZeroConn()
 
 type packetReaderImpl struct {
 	ch <-chan []byte
@@ -52,14 +83,25 @@ func (s *syncPacketConn) WriteTo(b []byte, addr net.Addr) (int, error) {
 }
 
 func Serve(l net.PacketConn, h Handler) error {
+	ipv4pc := ipv4.NewPacketConn(l)
+	flags := ipv4.FlagSrc | ipv4.FlagDst | ipv4.FlagInterface
+	if err := ipv4pc.SetControlMessage(flags, true); err != nil {
+		return err
+	}
+
 	lock := sync.Mutex{}
 	table := make(map[string]chan []byte)
 	buf := make([]byte, 65536)
 
 	for {
-		n, addr, err := l.ReadFrom(buf)
+		n, cm, addr, err := ipv4pc.ReadFrom(buf)
 		if err != nil {
 			return err
+		}
+
+		// Ignore packet without control message.
+		if cm == nil {
+			continue
 		}
 
 		// Ownership of this buffer is transferred to the goroutine for the peer
@@ -93,7 +135,7 @@ func Serve(l net.PacketConn, h Handler) error {
 				// Therefore, continue running the serve loop until there are no more
 				// inbound packets on the channel for this peer address.
 				for stop := false; !stop; {
-					serve(addr, r, w, h)
+					serve(controlMessage{cm}, r, w, h)
 
 					lock.Lock()
 					if len(ch) == 0 {

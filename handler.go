@@ -19,11 +19,17 @@ type WriteCloser interface {
 	io.WriteCloser
 }
 
+// Conn provides context about the current "connection".
+type Conn interface {
+	LocalAddr() net.Addr
+	RemoteAddr() net.Addr
+}
+
 // Handler is the interface a consumer of this library needs to implement to be
 // able to serve TFTP requests.
 type Handler interface {
-	ReadFile(peer net.Addr, filename string) (ReadCloser, error)
-	WriteFile(peer net.Addr, filename string) (WriteCloser, error)
+	ReadFile(c Conn, filename string) (ReadCloser, error)
+	WriteFile(c Conn, filename string) (WriteCloser, error)
 }
 
 // ErrTimeout is returned by the packetReader when it times out reading a packet.
@@ -53,18 +59,18 @@ type session struct {
 	packetWriter
 
 	h       Handler
-	addr    net.Addr
+	c       Conn
 	blksize int // The payload size per data packet.
 	timeout int // The number of seconds before a retransmit takes place.
 }
 
-func serve(addr net.Addr, r packetReader, w packetWriter, h Handler) {
+func serve(c Conn, r packetReader, w packetWriter, h Handler) {
 	s := &session{
 		packetReader: r,
 		packetWriter: w,
 
 		h:       h,
-		addr:    addr,
+		c:       c,
 		blksize: 512,
 		timeout: 3,
 	}
@@ -192,7 +198,7 @@ func ackValidator(blockNr uint16) packetValidator {
 }
 
 func (s *session) serveRRQ(p *packetRRQ) {
-	rc, err := s.h.ReadFile(s.addr, p.filename)
+	rc, err := s.h.ReadFile(s.c, p.filename)
 	if err != nil {
 		switch err {
 		case os.ErrNotExist:

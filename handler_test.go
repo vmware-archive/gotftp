@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"errors"
 	"io"
-	"net"
 	"os"
 	"testing"
 	"testing/iotest"
@@ -33,8 +32,8 @@ type handlerContext struct {
 	snd chan interface{}
 	rcv chan packet
 
-	readFunc  func(peer net.Addr, filename string) (ReadCloser, error)
-	writeFunc func(peer net.Addr, filename string) (WriteCloser, error)
+	readFunc  func(c Conn, filename string) (ReadCloser, error)
+	writeFunc func(c Conn, filename string) (WriteCloser, error)
 }
 
 func newHandlerContext() *handlerContext {
@@ -43,7 +42,7 @@ func newHandlerContext() *handlerContext {
 		rcv: make(chan packet, 1),
 	}
 	go func() {
-		serve(&net.UDPAddr{}, h, h, h)
+		serve(nil, h, h, h)
 
 		// No more packets can be sent by the server.
 		close(h.rcv)
@@ -77,29 +76,29 @@ func (h *handlerContext) write(p packet) error {
 }
 
 // To implement Handler
-func (h *handlerContext) ReadFile(peer net.Addr, filename string) (ReadCloser, error) {
+func (h *handlerContext) ReadFile(c Conn, filename string) (ReadCloser, error) {
 	if h.readFunc == nil {
 		return &rcBuffer{&bytes.Buffer{}}, nil
 	}
-	return h.readFunc(peer, filename)
+	return h.readFunc(c, filename)
 }
 
 // To implement Handler
-func (h *handlerContext) WriteFile(peer net.Addr, filename string) (WriteCloser, error) {
+func (h *handlerContext) WriteFile(c Conn, filename string) (WriteCloser, error) {
 	if h.writeFunc == nil {
 		return &wcBuffer{&bytes.Buffer{}}, nil
 	}
-	return h.writeFunc(peer, filename)
+	return h.writeFunc(c, filename)
 }
 
 func (h *handlerContext) SetReadCloser(r ReadCloser) {
-	h.readFunc = func(_ net.Addr, _ string) (ReadCloser, error) {
+	h.readFunc = func(_ Conn, _ string) (ReadCloser, error) {
 		return r, nil
 	}
 }
 
 func (h *handlerContext) SetWriteCloser(w WriteCloser) {
-	h.writeFunc = func(_ net.Addr, _ string) (WriteCloser, error) {
+	h.writeFunc = func(_ Conn, _ string) (WriteCloser, error) {
 		return w, nil
 	}
 }
@@ -169,7 +168,7 @@ func TestReadFileError(t *testing.T) {
 
 	for _, test := range tests {
 		h := newHandlerContext()
-		h.readFunc = func(_ net.Addr, filename string) (ReadCloser, error) {
+		h.readFunc = func(_ Conn, filename string) (ReadCloser, error) {
 			switch filename {
 			case "NotExists":
 				return nil, os.ErrNotExist
