@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	"code.google.com/p/go.net/ipv4"
+	"golang.org/x/net/ipv4"
 )
 
 type controlMessage struct {
